@@ -72,12 +72,17 @@ def FindNeighbors(TrainingInfo,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Resolu
     # Find neighbors of unmeasured locations
     Neigh = NearestNeighbors(n_neighbors=TrainingInfo.NumNbrs)
     Neigh.fit(MeasuredIdxs)
+    # print(f'One of the the values of UnMeasuredIdxs is {UnMeasuredIdxs[0]}')
     NeighborDistances, NeighborIndices = Neigh.kneighbors(UnMeasuredIdxs)
     NeighborDistances = NeighborDistances * Resolution
     #print(np.max(NeighborIndices))
     #print(MeasuredValues.shape)
+    # print(f'The shape of MeasuredValues is {np.shape(MeasuredValues)}')
+    # print(f'One of the the values of MeasuredValues is {MeasuredValues[0][0]}')
+    # print(f'The shape of NeighborIndices is {np.shape(NeighborIndices)}')
     NeighborValues = MeasuredValues[NeighborIndices]
-    #print(NeighborValues.shape)
+    # print(f'One of the the values of NeighborIndices is {NeighborIndices[0]}')
+    # print(f'The shape of NeighborValues is {NeighborValues.shape}')
     NeighborWeights = computeNeighborWeights(NeighborDistances,TrainingInfo)
     
     return(NeighborValues,NeighborWeights,NeighborDistances)
@@ -87,6 +92,10 @@ def ComputeRecons(TrainingInfo,NeighborValues,NeighborWeights,SizeImage,UnMeasur
     # Perform reconstruction
     ReconValues = computeWeightedMRecons(NeighborValues,NeighborWeights,TrainingInfo)
     ReconImage = np.zeros((SizeImage[0], SizeImage[1]))
+    print(UnMeasuredIdxs.shape)
+    print(MeasuredIdxs.shape)
+    print(MeasuredValues.shape)
+    print(ReconValues.shape)
     ReconImage[UnMeasuredIdxs[:,0], UnMeasuredIdxs[:,1]] = ReconValues
     ReconImage[MeasuredIdxs[:,0], MeasuredIdxs[:,1]] = MeasuredValues
 

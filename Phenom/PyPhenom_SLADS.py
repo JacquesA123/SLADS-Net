@@ -16,7 +16,7 @@ phenom = ppi.Phenom(license.PhenomUsername, license.PhenomUsername, license.Phen
 def AcquireNavCamImage(x_pos, y_pos, img):
     phenom.MoveToNavCam()
     # Move the phenom to an absolute location; (0,0) is the origin
-    phenom.MoveTo(x_pos, y_pos) 
+    phenom.MoveTo(x_pos, y_pos, algorithm = ppi.NavigationAlgorithm.BacklashOnly) 
     # Move the phenom by a certain amount relative to its current position
     #phenom.MoveBy(1e-6, 1e-6) 
     acqCamParams = ppi.CamParams()
@@ -24,6 +24,23 @@ def AcquireNavCamImage(x_pos, y_pos, img):
     acqCamParams.nFrames = 1
     acqNavCam = phenom.NavCamAcquireImage(acqCamParams)
     ppi.Save(acqNavCam, f'{img}.tiff')
+
+def AcquireNavCamImage_at_current_location(SavePath, img, size):
+    phenom.MoveToNavCam()
+    acqCamParams = ppi.CamParams()
+    acqCamParams.size = ppi.Size(size, size)
+    acqCamParams.nFrames = 1
+    acqNavCam = phenom.NavCamAcquireImage(acqCamParams)
+    os.chdir(SavePath)
+    filename = f"{img}.tiff"
+    filepath = os.path.join(SavePath, filename)
+
+    # Save the image
+    ppi.Save(acqNavCam, filepath)
+
+    # Return the full image path
+    return filepath
+
 
 # Grid overlay is used for drift analysis
 def overlay_grid_on_image(image_path, num_lines=10):
@@ -89,7 +106,7 @@ def AcquireSEM_spot(x, y, filename):
     # Prep for SEM image acquisition
     phenom.MoveToSem()
     print(phenom.GetOperationalMode())
-    phenom.MoveTo(x, y)
+    phenom.MoveTo(x, y, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
     phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
     phenom.SemAutoContrastBrightness()
 
@@ -205,8 +222,8 @@ def Analyze_SEM_Drift(x0, y0, x1, y1, filename):
 
 def AcquireSEMImage_at_current_location(path, filename, image_side_length_in_pixels):
     phenom.MoveToSem()
-    phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
-    phenom.SemAutoContrastBrightness()
+    # phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
+    # phenom.SemAutoContrastBrightness()
 
     # Change to directory where the image will be saved
     os.chdir(path)
@@ -239,7 +256,7 @@ def AcquireSEMImage_at_current_location(path, filename, image_side_length_in_pix
 def AcquireSEMImage(x_pos, y_pos, filename, convert_image_to_numpy = True):
     phenom.MoveToSem()
     print(phenom.GetOperationalMode())
-    phenom.MoveTo(x_pos, y_pos)
+    phenom.MoveTo(x_pos, y_pos, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
     time.sleep(5)
     phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
     phenom.SemAutoContrastBrightness()

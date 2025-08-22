@@ -79,6 +79,7 @@ def writeSpectrum(spectrum, filename, address, sample_name, dwell_time):
     s.save(f'{filename}.msa', encoding = 'utf8')
 
     spectrum = np.array(spectrum.data)
+    print(f'From inside writespectrum, we create a spectrum of shape {np.shape(spectrum)}')
     np.save(filename, spectrum)
     with h5py.File(f"{filename}.hdf5", "w") as f:
         # Create the dataset
@@ -162,12 +163,9 @@ def getSpotSpectrum(
         size,
         SavePath,
         MainPath, 
-        image_path,
         dpp,
-        settings,
         address,
         phenom,
-        ppi,
         sample_name,
         dwell_time):   
     
@@ -183,9 +181,10 @@ def getSpotSpectrum(
 
     # Save spectrum data
     os.chdir(SavePath)
-    spectrum = writeSpectrum(dpp.GetSpectrum(), 'Spectrum at ({0:.2f}, {1:.2f})'.format(i, j), address = address, sample_name = sample_name, dwell_time = dwell_time)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    spectrum = writeSpectrum(dpp.GetSpectrum(), f'Spectrum at ({i:.2f}, {j:.2f}) taken at {timestamp}', address = address, sample_name = sample_name, dwell_time = dwell_time)
     os.chdir(MainPath)
 
-    return spectrum
+    return spectrum # returns a spectrum in numpy array format
 
     # print(f'Spectrum Acquired at ({i}, {j})')

@@ -1,8 +1,15 @@
 #! /usr/bin/env python3
 import sys
-sys.path.append('code')
 import warnings
+import os
 warnings.filterwarnings("ignore")
+
+# Appended all of these to path due to the way my (Jacques) local virtual environment was set up
+os.chdir('SLADS-Net')
+sys.path.append('code')
+sys.path.append('ResultsAndData')
+sys.path.append('measurement')
+
 ###############################################################################
 ############## USER INPUTS: L-0 ###############################################
 ###############################################################################

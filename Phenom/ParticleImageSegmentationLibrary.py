@@ -13,6 +13,7 @@ import shutil
 import json
 import numpy as np
 from PyPhenom_SLADS import AcquireSEMImage_at_current_location
+from PyPhenom_SLADS import AcquireNavCamImage_at_current_location
 import PyPhenom as ppi
 import license
 import os
@@ -64,9 +65,9 @@ def convert_to_python(obj):
         return obj
     
 # re and save SEM image
-def acquire_and_save_image(x, y, image_index, SavePath):
+def acquire_and_save_image(x, y, image_index, SavePath, image_side_length_in_pixels):
     image_filename = f'SEM_image_{image_index}'
-    image_path = AcquireSEMImage_at_current_location(SavePath, os.path.basename(image_filename), 1024)
+    image_path = AcquireSEMImage_at_current_location(SavePath, os.path.basename(image_filename), image_side_length_in_pixels)
     return image_path
 
 # Get current position
@@ -74,10 +75,18 @@ def get_current_position(phenom):
     pos = phenom.GetStageModeAndPosition().position
     return pos.x, pos.y
 
-# Convert minimum area from square micrometers to pixels
-def convert_micrometer_area_to_pixels(micrometer_value, image, image_horizontal_field_width):
+# See function title
+def convert_micrometer_radius_to_pixel_area(micrometer_value, image, image_horizontal_field_width):
     # print("image shape:", np.shape(image))
     return np.pi * (micrometer_value)**2 * (1e-12) * (np.shape(image)[0])**2 * (image_horizontal_field_width)**-2
+
+# Convert micrometers to pixels
+def convert_micrometers_to_pixels(micrometer_value, image, image_horizontal_field_width):
+    return micrometer_value * 1e6 * (np.shape(image)[0] / image_horizontal_field_width)
+
+# Convert pixels to micrometers
+def convert_pixels_to_micrometers(pixel_value, image, image_horizontal_field_width):
+    return pixel_value * (image_horizontal_field_width / np.shape(image)[0]) * 1e6
 
 # Create binary mask for image
 def create_binary_mask(image_path, threshold_intensity, max_binary_value, images_path):
@@ -145,8 +154,8 @@ def filter_and_draw_contours(images_path, image, threshold, minimum_area, image_
 
 
 
-# Find and label particle center
-def find_and_label_particle_center(contour, image_copy, i):
+# Find particle center
+def find_particle_center(contour, image_copy, i):
     M = cv2.moments(contour)
     if M['m00'] != 0:
         # Use the centroid formula
@@ -154,11 +163,17 @@ def find_and_label_particle_center(contour, image_copy, i):
         cy = int(M['m01']/M['m00'])
         center = (cx, cy)
 
-        # Label the center
-        cv2.putText(img = image_copy, text = f"Particle {i}", org = (cx - 20, cy - 20),
-            fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 0.5, color = (0, 0, 0), thickness = 2)
     return center
 
+# Label particle center in a way which avoids overlap between the drawn radius and the labeling text
+def label_particle_center(center, average_contour_point, image_copy, i):
+    # Label the center in a way that avoids overlap with the drawn radius
+    if center[1] < average_contour_point[1]:
+        cv2.putText(img = image_copy, text = f"Particle {i}", org = (center[0] - 20, center[1] - 20),
+            fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 0.5, color = (0, 0, 0), thickness = 2)
+    else:
+        cv2.putText(img = image_copy, text = f"Particle {i}", org = (center[0] - 20, center[1] + 20),
+            fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 0.5, color = (0, 0, 0), thickness = 2)
 # Find particle radius
 def find_and_draw_particle_radius(image_copy, contour, center):
 
@@ -196,7 +211,7 @@ def find_and_draw_radial_points_for_sampling(image_copy, center, average_contour
     return sampling_points
 
 # Perform EDS analysis of all particles on an image
-def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time):
+def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time, image_side_length_in_pixels):
     # Set up the phenom horizontal field width
     phenom.SetHFW(SEM_image_length)
     
@@ -213,7 +228,7 @@ def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, t
 
     # Create folder for image-related data and add image to it
     images_path = create_folder(SEM_image_path, 'Images')
-    image_path = acquire_and_save_image(position[0], position[1], images_taken, images_path)
+    image_path = acquire_and_save_image(position[0], position[1], images_taken, images_path, image_side_length_in_pixels)
 
     image = cv2.imread(image_path, 0) # Load the image in pixel format
 
@@ -228,8 +243,7 @@ def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, t
     particles_path = create_folder(SEM_image_path, 'Particles')
 
     # Filter the particles
-    # image_been_read = 
-    minimum_area = convert_micrometer_area_to_pixels(minimum_particle_radius, threshold, SEM_image_length)
+    minimum_area = convert_micrometer_radius_to_pixel_area(minimum_particle_radius, threshold, SEM_image_length)
     print(f"minimum area = {minimum_area}")
     particles = []
     filtered_contours, image_copy = filter_and_draw_contours(images_path, image, threshold, minimum_area, image_path)
@@ -237,8 +251,9 @@ def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, t
 
     # Convert the filtered contours into particle data
     for i, contour in enumerate(filtered_contours):
-        center = find_and_label_particle_center(contour, image_copy, i)
+        center = find_particle_center(contour, image_copy, i)
         radius, average_contour_point = find_and_draw_particle_radius(image_copy, contour, center)
+        label_particle_center(center, average_contour_point, image_copy, i)
         sampling_points = find_and_draw_radial_points_for_sampling(image_copy, center, average_contour_point, number_of_sampling_points)
 
         # Instantiate the particle object 
@@ -255,11 +270,18 @@ def Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, t
         # Update the particle count globally
         total_number_of_particles += 1
 
+
+        # Convert the sampling points to EDS coordinates
+        sampling_points_in_EDS_coords = []
+        for sampling_point in particle.sampling_points:
+            sampling_point_EDS_coords = convert_pixels_to_EDS_coordinates(sampling_point, image)
+            sampling_points_in_EDS_coords.append(sampling_point_EDS_coords)
+        
         # Save particle metadata
         metadata = {
-            "radius": radius,
-            "center": center,
-            "sampling_points": sampling_points
+            u"Radius (\u03bcm)": convert_pixels_to_micrometers(radius, image, SEM_image_length),
+            "center": convert_pixels_to_EDS_coordinates(center, image),
+            "sampling_points": sampling_points_in_EDS_coords
         }
         metadata_clean = convert_to_python(metadata)
         json_path = os.path.join(particle_folder, "metadata.json")
@@ -309,7 +331,7 @@ def perform_EDS_on_single_particle(image, SavePath, MainPath, dpp, settings, add
 
         # Take EDS spot measurement
         size = (np.shape(image)[0], np.shape(image)[1])
-        getSpotSpectrum(sampling_point_EDS_coords[0], sampling_point_EDS_coords[1], size,SavePath,MainPath, image, dpp,settings,address,phenom,ppi, sample_name = sample_name, dwell_time=dwell_time)
+        getSpotSpectrum(sampling_point_EDS_coords[0], sampling_point_EDS_coords[1], size,SavePath,MainPath, dpp,address,phenom, sample_name = sample_name, dwell_time=dwell_time)
 
         # Annotate the SEM image with the EDS spot measurement locations
         # os.chdir(SavePath)
@@ -321,19 +343,77 @@ def convert_pixels_to_EDS_coordinates(point, image):
     new_x_coordinate = point[0] / np.shape(image)[0]
     new_y_coordinate = point[1] / np.shape(image)[1]
     return (new_x_coordinate, new_y_coordinate)
+
+# Draw the sampling region onto the navcam image
+def draw_sampling_region_onto_NavCam_image(image_path, sample_area_center, sample_area_length, NavCam_HFW, NavCam_image_size):
+    # Takes Navcam image as input and loads it in opencv
+    image = cv2.imread(image_path, 0) # Load image in grayscale (0 corresponds to grayscale)
+
+    # Draws a rectangle onto the Navcam image
+    print(f'NavCam image size is {NavCam_image_size}')
+    sample_area_length_in_pixels = (NavCam_image_size / NavCam_HFW) * sample_area_length
+    top_left_point_x_pos = int((NavCam_image_size - sample_area_length_in_pixels) / 2)
+    top_left_point_y_pos = int((NavCam_image_size - sample_area_length_in_pixels) / 2)
+    bottom_right_point_x_pos =  int((NavCam_image_size + sample_area_length_in_pixels) / 2)
+    bottom_right_point_y_pos = int((NavCam_image_size + sample_area_length_in_pixels) / 2)
+    
+    # # Keep the bottom left position in pixels for the SEM image location tracking
+    # bottom_left_point_x_pos = int((NavCam_image_size - sample_area_length_in_pixels) / 2)
+    # bottom_left_point_y_pos = int((NavCam_image_size + sample_area_length_in_pixels) / 2)
+
+    pt1 = (top_left_point_x_pos, top_left_point_y_pos)
+    pt2 = (bottom_right_point_x_pos, bottom_right_point_y_pos)
+    print('hello')
+    print(pt1)
+    print(pt2)
+    cv2.rectangle(image, pt1, pt2, color = (255, 255, 255))
+    cv2.imwrite(image_path, image)
+
+def add_marker_to_navcam_image(NavCam_image_path, position, sample_area_center, NavCam_image_size, NavCam_HFW, bottom_left_absolute_coords):
+    image = cv2.imread(NavCam_image_path, 0)
+    # x_pixel = int((NavCam_image_size / 2) + (position[0] - sample_area_center[0]) * (NavCam_image_size / NavCam_HFW))
+    # y_pixel = int((NavCam_image_size / 2) + (position[1] - sample_area_center[1]) * (NavCam_image_size / NavCam_HFW))
+    x_pixel = bottom_left_x_pixel + pixel_difference(position, bottom_left_absolute_coords, NavCam_image_size, NavCam_HFW)[0]
+    y_pixel = bottom_left_y_pixel + pixel_difference(position, bottom_left_absolute_coords, NavCam_image_size, NavCam_HFW)[1]
+    print(f'x pixel is {x_pixel}')
+    print(f'y pixel is {y_pixel}')
+    cv2.circle(image, (x_pixel, y_pixel), 10, (255, 255, 255))
+    cv2.imwrite(NavCam_image_path, image)
+
+def pixel_difference(point_1, point_2, image_pixel_length, image_meter_length):
+    delta_x = int((point_1[0] - point_2[0]) * (image_pixel_length / image_meter_length))
+    delta_y = int((point_1[1] - point_2[1]) * (image_pixel_length / image_meter_length))
+    return (delta_x, delta_y)
     
 # Perform chain imaging
-def perform_chain_imaging(phenom, SavePath, threshold_intensity, max_binary_value, minimum_particle_radius, sample_area_center, sample_area_length, shift_between_images_length, sample_name, address, number_of_sampling_points_per_particle, SEM_image_length, total_number_of_particles, dwell_time, desired_number_of_particles):
+def perform_chain_imaging(phenom, SavePath, threshold_intensity, max_binary_value, minimum_particle_radius, sample_area_center, sample_area_length, shift_between_images_length, sample_name, address, number_of_sampling_points_per_particle, SEM_image_length, total_number_of_particles, dwell_time, desired_number_of_particles, image_side_length_in_pixels):
 
     # Determine initial position for image chain
     initial_image_position = (sample_area_center[0] - sample_area_length, sample_area_center[0] - sample_area_length)
-    phenom.MoveTo(initial_image_position[0], initial_image_position[1])
+    phenom.MoveTo(initial_image_position[0], initial_image_position[1], algorithm = ppi.NavigationAlgorithm.BacklashOnly)
 
     # Print dimensions of sample area
     print(f'The sampling area has dimensions {sample_area_length} x {sample_area_length} and is centered at {sample_area_center}.')
     print(f"The upper boundary occurs at {sample_area_center[1] + 0.5 * sample_area_length}")
 
+    # Acquire navcam image of  a larger region which contains the sampling region
+    phenom.MoveToNavCam()
+    if 2 * sample_area_length > 0.002017:
+        NavCam_HFW = 2 * sample_area_length
+    else:
+        NavCam_HFW = 0.002017
+    print(f'NavCam HFW is {NavCam_HFW}')
+    phenom.SetHFW(NavCam_HFW)
+    NavCam_image_size = 912
+    NavCam_image_path = AcquireNavCamImage_at_current_location(SavePath, "larger_sampling_region", NavCam_image_size)
+    draw_sampling_region_onto_NavCam_image(NavCam_image_path, sample_area_center, sample_area_length, NavCam_HFW, NavCam_image_size)
+
+    # Keep track of bottom left of sampling area for added SEM Image Location markers
+    bottom_left_of_sampling_area = (sample_area_center[0] - 0.5 * sample_area_length, sample_area_center[1] - 0.5 * sample_area_length)
+    bottom_left_of_sampling_area_pixels = (int((bottom_left_of_sampling_area[0])))
+
     # Start image chain
+    phenom.SetHFW(SEM_image_length)
     images_taken = 0
     leftmost_image_of_current_row_position = initial_image_position
 
@@ -345,8 +425,8 @@ def perform_chain_imaging(phenom, SavePath, threshold_intensity, max_binary_valu
         # Check if position is past the right boundary of the sample region
         if x_coordinate > (sample_area_center[0] + sample_area_length):
             # Move to the start of the next row
-            phenom.MoveTo(leftmost_image_of_current_row_position[0], leftmost_image_of_current_row_position[1])
-            phenom.MoveBy(0, shift_between_images_length)
+            phenom.MoveTo(leftmost_image_of_current_row_position[0], leftmost_image_of_current_row_position[1], algorithm = ppi.NavigationAlgorithm.BacklashOnly)
+            phenom.MoveBy(0, shift_between_images_length, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
             print("Moving up a row")
 
             # Update position and row reference
@@ -359,31 +439,42 @@ def perform_chain_imaging(phenom, SavePath, threshold_intensity, max_binary_valu
                 print("Stopping image acquisition because vertical limit of the sample area has been reached")
                 break
 
-            total_number_of_particles = Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points_per_particle, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time)
+            total_number_of_particles = Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points_per_particle, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time, image_side_length_in_pixels)
+
+            # Add marker to navcam image
+            add_marker_to_navcam_image(NavCam_image_path, position, sample_area_center, NavCam_image_size, NavCam_HFW)
 
             images_taken += 1
 
             # Move to the right
             print("Moving to the right")
-            phenom.MoveBy(shift_between_images_length, 0)
+            time.sleep(1)
+            phenom.MoveBy(shift_between_images_length, 0, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
             
 
         else:
 
             # Perform EDS Analysis
-            total_number_of_particles = Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points_per_particle, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time)
+            total_number_of_particles = Perform_EDS_on_particles_in_SEM_image(phenom, SavePath, address, position, threshold_intensity, max_binary_value, minimum_particle_radius, number_of_sampling_points_per_particle, sample_name, images_taken, SEM_image_length, total_number_of_particles, dwell_time, image_side_length_in_pixels)
+
+            # Add marker to navcam image
+            add_marker_to_navcam_image(NavCam_image_path, position, sample_area_center, NavCam_image_size, NavCam_HFW)
 
             images_taken += 1
 
             # Move the phenom to the right
-            phenom.MoveBy(shift_between_images_length, 0)
+            time.sleep(1)
+            phenom.MoveBy(shift_between_images_length, 0, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
+            print(position)
             print('Moving to the right')
 
     # Save project metadata
     project_metadata = {
         "Sample Name": sample_name,
         "Total Number of Particles": total_number_of_particles,
-        "Acquisition/Dwell Time": dwell_time
+        "Acquisition/Dwell Time": dwell_time,
+        "SEM Image Horizontal Field Width (meters)": SEM_image_length,
+        "SEM Image Side Length (pixels)": image_side_length_in_pixels 
     }
     project_metadata_clean = convert_to_python(project_metadata)
     json_path = os.path.join(SavePath, "metadata.json")

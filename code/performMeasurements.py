@@ -9,6 +9,9 @@ from variableDefinitions import BatchSamplingParams
 def perfromInitialMeasurements(CodePath,TestingImageSet,ImNum,ImageExtension,Mask,SimulationRun):
     
     Img = loadTestImage(CodePath,TestingImageSet,ImNum,ImageExtension,SimulationRun)
+    print(Img.shape)
+    print(Img[0])
+    print(Img[0][0])
     if Mask.shape[0]!=Img.shape[0] or Mask.shape[1]!=Img.shape[1]:
         sys.exit('Error!!! The dimensions you entered in "SizeImage" do not match the dimensions of the testing image in ./ResultsAndData/TestingImages/TestingImageSet_' + TestingImageSet)
     MeasuredValues = Img[Mask==1]

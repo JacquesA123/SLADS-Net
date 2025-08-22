@@ -12,7 +12,7 @@ import license #license information held in a seperate directory for transferabi
 def AcquireNavCamImage(x_pos, y_pos, img):
     phenom.MoveToNavCam()
     # Move the phenom to an absolute location; (0,0) is the origin
-    phenom.MoveTo(x_pos, y_pos) 
+    phenom.MoveTo(x_pos, y_pos, algorithm = ppi.NavigationAlgorithm.BacklashOnly) 
     # Move the phenom by a certain amount relative to its current position
     #phenom.MoveBy(1e-6, 1e-6) 
     acqCamParams = ppi.CamParams()
@@ -84,10 +84,10 @@ def Analyze_SEM_Drift(x0, y0, x1, y1, filename):
     os.chdir(mydir)
 
     # Move far away
-    phenom.MoveTo(0.009, 0.009)
+    phenom.MoveTo(0.009, 0.009, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
     # Take SEM image at initial location
     # phenom.MoveTo(-9e-3, -9e-3)
-    phenom.MoveTo(x0 + 1e-7, y0 + 1e-7) # Move very close to the desired acquisition position before moving to the desired position, in order to reduce drift
+    phenom.MoveTo(x0 + 1e-7, y0 + 1e-7, algorithm = ppi.NavigationAlgorithm.BacklashOnly) # Move very close to the desired acquisition position before moving to the desired position, in order to reduce drift
     AcquireSEMImage(x0, y0, filename + '_initial')
 
     # Move to intermediate location and take SEM image
@@ -108,7 +108,7 @@ def Analyze_SEM_Drift(x0, y0, x1, y1, filename):
 def AcquireSEMImage(x_pos, y_pos, filename, convert_image_to_numpy = True):
     phenom.MoveToSem()
     print(phenom.GetOperationalMode())
-    phenom.MoveTo(x_pos, y_pos)
+    phenom.MoveTo(x_pos, y_pos, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
     time.sleep(5)
     phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
     phenom.SemAutoContrastBrightness()
@@ -166,7 +166,7 @@ def AcquireSEM_spot(x, y, filename):
     # Prep for SEM image acquisition
     phenom.MoveToSem()
     print(phenom.GetOperationalMode())
-    phenom.MoveTo(x, y)
+    phenom.MoveTo(x, y, algorithm = ppi.NavigationAlgorithm.BacklashOnly)
     phenom.SemAutoFocus() # Autofocuses the SEM (which is the same as finding the optimal working distance)
     phenom.SemAutoContrastBrightness()
 

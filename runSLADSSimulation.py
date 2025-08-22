@@ -2,7 +2,11 @@
 import sys
 import warnings
 warnings.filterwarnings("ignore")
+import os
+os.chdir('SLADS-Net')
 sys.path.append('code')
+sys.path.append('ResultsAndData')
+sys.path.append('measurement')
 import timeit
 
 ###############################################################################

@@ -3,10 +3,14 @@
 import sys
 sys.path.append('code')
 import numpy as np
+import os
 from scipy.io import savemat
 from skimage import filters
+from datetime import datetime
 import pylab
 
+from perform_EDS_measurements import perform_EDS_measurements # Jacques updated EDS measurement code
+from perform_EDS_measurements import perform_single_EDS_measurement # Jacques updated EDS measurement code
 from performMeasurements import perfromMeasurements
 from performMeasurements import perfromInitialMeasurements
 from updateERDandFindNewLocation import updateERDandFindNewLocationFirst
@@ -29,6 +33,10 @@ def runSLADSSimulationOnce(Mask,CodePath,ImageSet,SizeImage,StopCondParams,Theta
     UnMeasuredIdxs = np.transpose(np.where(Mask==0))
     
     ContinuousMeasuredValues = perfromInitialMeasurements(CodePath,ImageSet,ImNum,ImageExtension,Mask,SimulationRun)
+    print(ContinuousMeasuredValues)
+    print(f'The first element of ContinuousMeasuredValues is {ContinuousMeasuredValues[0]}')
+    print(f'The second element of ContinuousMeasuredValues is {ContinuousMeasuredValues[1]}')
+    print(ContinuousMeasuredValues.shape)
     
 ####
 #    MeasuredIdxs, ContinuousMeasuredValues, travdist = pathOrder(MeasuredIdxs, ContinuousMeasuredValues, np.array([0,0]))
@@ -65,7 +73,7 @@ def runSLADSSimulationOnce(Mask,CodePath,ImageSet,SizeImage,StopCondParams,Theta
 ####
         
         ContinuousMeasuredValues = np.hstack((ContinuousMeasuredValues,NewContinuousValues))
-        
+        print(ContinuousMeasuredValues.shape)
 
         
         
@@ -132,16 +140,74 @@ def runSLADSOnce(Mask,CodePath,SizeImage,StopCondParams,Theta,TrainingInfo,Resol
     # CODE HERE
     # Plug in Your Measurement Routine
     # Please use 'MeasuredValues' as output variable
-    # ContinuousMeasuredValues = perfromMeasurements(Mask)
-    HSI_full = np.load("measurement/data/validation_HSI.npy")
-    HSI = HSI_full[0]
-    del HSI_full
-    import sys
-    sys.path.append(r'C:\Users\nolan\OneDrive\Desktop\College\Research\ANL\SLADS\SLADS-Net\measurement')
-    from measurement.EDS_simulator import EDS_Simulator
-    EDS = EDS_Simulator(HSI)
-    EDS.generate_classifications()
-    ContinuousMeasuredValues = EDS.get_measured_values(MeasuredIdxs)
+
+    # Instantiate EDS Manager
+    from measurement.EDS_simulator import EDS_Manager # Manager is used to process one spectra at a time
+    EDS = EDS_Manager((256, 256))
+    ContinuousMeasuredValues = np.zeros((655,))
+    for i, idx in enumerate(MeasuredIdxs):
+        # Perform measurement at index
+        spectrum = np.array(perform_single_EDS_measurement(idx))
+
+        # Save the current spectrum
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\Jacques Random\Spectra")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"Spectrum_run_{timestamp}"
+        np.save(filename, spectrum)
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net")
+
+        # Classify the measured spectra into a class
+        classification = EDS.update(idx, spectrum)
+        print(f'Classification is {classification}')
+
+        # Add the class to the measured values
+        ContinuousMeasuredValues[i] = classification
+        print(f'Shape of ContinuousMeasuredValues after this round of initial sampling is {np.shape(ContinuousMeasuredValues)}')
+
+        # Save the current image with classifications
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\Jacques Random\Images")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"Run_{timestamp}"
+        np.save(filename, EDS.image)
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net")
+
+        # Save the current ContinuousMeasuredValues
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\Jacques Random\ContinuousMeasuredValues")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"Run_ContinuousMeasuredValues_{timestamp}"
+        np.save(filename, ContinuousMeasuredValues)
+        os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net")
+    
+    # Save the current image with classifications
+    os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\Jacques Random\Images")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"End_of_image_Run_{timestamp}"
+    np.save(filename, EDS.image)
+    os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net")
+
+    # Save the current ContinuousMeasuredValues
+    os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\Jacques Random\ContinuousMeasuredValues")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"End_of_run_ContinuousMeasuredValues_{timestamp}"
+    np.save(filename, ContinuousMeasuredValues)
+    os.chdir(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net")
+
+    # ContinuousMeasuredValues = EDS.get_measured_values(MeasuredIdxs) # Get a mask of the classification values
+    print(f'Shape of the mask measured indices is {np.shape(MeasuredIdxs)}')
+
+    # ContinuousMeasuredValues = np.array(perform_EDS_measurements(MeasuredIdxs)) # Commenting this out for faster testing
+    # np.save('all_spectra.npy', ContinuousMeasuredValues)
+    # ContinuousMeasuredValues = np.load(r"C:\Users\labuser\Downloads\PyPhenom (2.1)\PyPhenom\Jacques_Argonne_Internship\Phenom Repositories\SLADS-Net_V3\SLADS-Net\all_spectra.npy")
+    print(type(ContinuousMeasuredValues))
+    print(f'Shape of ContinuousMeasuredValues is {np.shape(ContinuousMeasuredValues)}')
+    # HSI_full = np.load("measurement/data/validation_HSI.npy")
+    # HSI_full = ContinuousMeasuredValues
+    # HSI = HSI_full[0]
+    # del HSI_full
+    # sys.path.append(r'C:\Users\nolan\OneDrive\Desktop\College\Research\ANL\SLADS\SLADS-Net\measurement')
+    
+    # print(f'The type of HSI_full is {type(HSI_full)}')
+    # ContinuousMeasuredValues = EDS.get_measured_values(MeasuredIdxs)
     ##################################################################
     
     if Classify=='2C':
@@ -166,17 +232,23 @@ def runSLADSOnce(Mask,CodePath,SizeImage,StopCondParams,Theta,TrainingInfo,Resol
             Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationFirst(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfo,Resolution,ImageType,NumSamples,UpdateERDParams,BatchSamplingParams)           
         else:
             Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationAfter(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfo,Resolution,ImageType,UpdateERDParams,BatchSamplingParams,StopCondFuncVal,IterNum,NumSamples,NewIdxs,ReconValues,ReconImage,ERDValues,MaxIdxsVect)
-        
+        print(f'NewIdxs during this SLADS round has value of {NewIdxs}')
+        print(f'Shape of NewIdxs during this SLADS round is {np.shape(NewIdxs)}')
         ##################################################################
         # CODE HERE
         # Plug in Your Measurement Routine
         # Please use 'NewContValues' as output variable
         # NewContinuousValues = perfromMeasurements(NewIdxs)
-        NewContinuousValues = EDS.get_measured_values(NewIdxs)
+        spectrum = np.array(perform_single_EDS_measurement(NewIdxs))
+        classification = EDS.update(NewIdxs, spectrum)
+        print(f'Classification during SLADS is {classification}')
+        NewContinuousValues = np.array([classification])
+        print(f'NewContinuousValues = {NewContinuousValues}')
         
         ##################################################################    
         
         ContinuousMeasuredValues = np.hstack((ContinuousMeasuredValues,NewContinuousValues))
+        print(f'The shape of ContinuousMeasuredValues is {np.shape(ContinuousMeasuredValues)}')
         if Classify=='2C':           
             NewValues = NewContinuousValues > Threshold
             NewValues = NewValues+0

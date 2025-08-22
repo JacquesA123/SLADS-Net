@@ -11,10 +11,15 @@ def computeWeightedMRecons(NeighborValues,NeighborWeights,TrainingInfo):
     # Weighted Mode Computation
     if TrainingInfo.FeatReconMethod == 'DWM':
         ClassLabels = np.unique(NeighborValues)
+        print(np.shape(ClassLabels))
+        print(ClassLabels[0])
         ClassWeightSums = np.zeros((np.shape(NeighborWeights)[0], np.shape(ClassLabels)[0]))
         for i in range(0, np.shape(ClassLabels)[0]):
             TempFeats = np.zeros((np.shape(NeighborWeights)[0], np.shape(NeighborWeights)[1]))
             np.copyto(TempFeats, NeighborWeights)
+            # print("TempFeats shape:", TempFeats.shape)
+            # print("NeighborValues shape:", NeighborValues.shape)
+            # print("Mask shape:", (NeighborValues != ClassLabels[i]).shape)
             TempFeats[NeighborValues != ClassLabels[i]] = 0
             ClassWeightSums[:, i] = np.sum(TempFeats, axis=1)
         IdxOfMaxClass = np.argmax(ClassWeightSums, axis=1)
@@ -25,8 +30,8 @@ def computeWeightedMRecons(NeighborValues,NeighborWeights,TrainingInfo):
         #print((NeighborValues).shape)
         #print((NeighborWeights).shape)
         #print((NeighborValues * NeighborWeights[..., np.newaxis]).shape)
-        #ReconValues = np.sum(NeighborValues * NeighborWeights[..., np.newaxis], axis=(1,2))
-        ReconValues = np.sum(NeighborValues * NeighborWeights, axis=1)
+        # ReconValues = np.sum(NeighborValues * NeighborWeights[..., np.newaxis], axis=(1,2))
+        ReconValues = np.sum(NeighborValues * NeighborWeights, axis=1) 
         #print(ReconValues.shape)
 
     return ReconValues
